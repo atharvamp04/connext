@@ -176,164 +176,78 @@ class _ConnextHomePageState extends State<ConnextHomePage> {
           const SizedBox(height: 16),
           
           // Navigation Buttons
+          // Navigation Buttons
           Expanded(
             child: SingleChildScrollView(
               child: Column(
                 children: [
                   _navButton(
-                    icon: Icons.home_filled,
+                    icon: Icons.home,
                     label: 'Home',
                     view: ConnextView.home,
+                    collapsed: _sidebarCollapsed,
                   ),
                   _navButton(
                     icon: Icons.screen_share,
                     label: 'Share Screen',
                     view: ConnextView.share,
+                    collapsed: _sidebarCollapsed,
                   ),
                   _navButton(
-                    icon: Icons.computer,
+                    icon: Icons.phone_android,
                     label: 'Connect',
                     view: ConnextView.connect,
+                    collapsed: _sidebarCollapsed,
                   ),
                   _navButton(
-                    icon: Icons.lan,
-                    label: 'Network Nodes',
+                    icon: Icons.dns,
+                    label: 'Nodes',
                     view: ConnextView.nodes,
+                    collapsed: _sidebarCollapsed,
                   ),
                   _navButton(
-                    icon: Icons.key,
-                    label: 'PreAuth Keys',
+                    icon: Icons.vpn_key,
+                    label: 'Keys',
                     view: ConnextView.keys,
+                    collapsed: _sidebarCollapsed,
                   ),
                   _navButton(
                     icon: Icons.people,
                     label: 'Users',
                     view: ConnextView.users,
+                    collapsed: _sidebarCollapsed,
                   ),
                   _navButton(
-                    icon: Icons.devices_other,
+                    icon: Icons.devices,
                     label: 'Devices',
                     view: ConnextView.devices,
+                    collapsed: _sidebarCollapsed,
                   ),
                 ],
               ),
             ),
           ),
           
-          // User Profile Section (bottom)
+          const Spacer(),
+          
+          // Logout Button
           if (_currentUser != null)
-            Container(
+            Padding(
               padding: const EdgeInsets.all(16.0),
-              decoration: BoxDecoration(
-                border: Border(
-                  top: BorderSide(color: Colors.white.withOpacity(0.1)),
-                ),
-              ),
-              child: Column(
-                children: [
-                  // User Info
-                  InkWell(
-                    onTap: () {
-                      // Navigate to account/profile page
-                    },
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.white10,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: _sidebarCollapsed
-                          ? Center(
-                              child: CircleAvatar(
-                                radius: 16,
-                                backgroundColor: Colors.pink.shade600,
-                                child: Text(
-                                  _currentUser![0].toUpperCase(),
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            )
-                          : Row(
-                              children: [
-                                CircleAvatar(
-                                  radius: 16,
-                                  backgroundColor: Colors.pink.shade600,
-                                  child: Text(
-                                    _currentUser![0].toUpperCase(),
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        _currentUser!,
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      const Text(
-                                        'Account',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          color: Colors.white60,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  
-                  // Logout Button
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
+              child: _sidebarCollapsed
+                  ? IconButton(
                       onPressed: _logout,
-                      icon: const Icon(Icons.logout, size: 16),
-                      label: _sidebarCollapsed 
-                          ? const SizedBox.shrink() 
-                          : const Text('Logout', style: TextStyle(fontSize: 12)),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.red,
-                        side: BorderSide(color: Colors.red.withOpacity(0.3)),
-                        padding: EdgeInsets.symmetric(
-                          vertical: 8,
-                          horizontal: _sidebarCollapsed ? 8 : 12,
-                        ),
+                      icon: const Icon(Icons.logout),
+                      tooltip: 'Logout',
+                    )
+                  : ElevatedButton.icon(
+                      onPressed: _logout,
+                      icon: const Icon(Icons.logout),
+                      label: const Text('Logout'),
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 40),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-          
-          const SizedBox(height: 8),
-          
-          // Bottom text (only when expanded)
-          if (!_sidebarCollapsed)
-            const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: Text(
-                'Tailscale-powered\nself-hosted remote desktop',
-                style: TextStyle(fontSize: 11, color: Colors.white54),
-                textAlign: TextAlign.center,
-              ),
             ),
         ],
       ),
@@ -344,64 +258,44 @@ class _ConnextHomePageState extends State<ConnextHomePage> {
     required IconData icon,
     required String label,
     required ConnextView view,
+    required bool collapsed,
   }) {
-    final bool isActive = _currentView == view;
-    
+    final isSelected = _currentView == view;
     return Padding(
-      padding: EdgeInsets.symmetric(
-        horizontal: _sidebarCollapsed ? 8 : 12,
-        vertical: 4,
-      ),
-      child: Tooltip(
-        message: _sidebarCollapsed ? label : '',
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Material(
+        color: isSelected ? const Color(0xFF667EEA).withOpacity(0.15) : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
         child: InkWell(
-          borderRadius: BorderRadius.circular(10),
           onTap: () {
             setState(() {
               _currentView = view;
             });
           },
+          borderRadius: BorderRadius.circular(8),
           child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              // Active tab: white background with black text
-              // Inactive: white10
-              color: isActive 
-                  ? Colors.white 
-                  : Colors.white.withOpacity(0.1),
-            ),
-            padding: EdgeInsets.symmetric(
-              horizontal: _sidebarCollapsed ? 0 : 12,
-              vertical: 10,
-            ),
-            child: _sidebarCollapsed
-                ? Center(
-                    child: Icon(
-                      icon,
-                      size: 20,
-                      color: isActive ? Colors.black : Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            child: Row(
+              children: [
+                Icon(
+                  icon,
+                  color: isSelected ? const Color(0xFF667EEA) : Colors.white70,
+                  size: 20,
+                ),
+                if (!collapsed) ...[
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        color: isSelected ? Colors.white : Colors.white70,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                      ),
                     ),
-                  )
-                : Row(
-                    children: [
-                      Icon(
-                        icon,
-                        size: 20,
-                        color: isActive ? Colors.black : Colors.white,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          label,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: isActive ? Colors.black : Colors.white,
-                            fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-                          ),
-                        ),
-                      ),
-                    ],
                   ),
+                ],
+              ],
+            ),
           ),
         ),
       ),
@@ -413,9 +307,9 @@ class _ConnextHomePageState extends State<ConnextHomePage> {
       case ConnextView.home:
         return _HomeView();
       case ConnextView.share:
-        return WebRTCShareView();
+        return const WebRTCShareView();
       case ConnextView.connect:
-        return WebRTCConnectView();
+        return const WebRTCConnectView();
       case ConnextView.nodes:
         return const NodeScreen();
       case ConnextView.keys:

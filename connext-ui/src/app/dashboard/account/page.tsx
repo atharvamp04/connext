@@ -1,174 +1,263 @@
-"use client";
+"use client"
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import SectionHeader from "@/app/components/dashboard/SectionHeader";
-import { API_URL, authHeaders } from "@/lib/api";
-import { User, Mail, Calendar, Shield, Loader2 } from "lucide-react";
+import { useEffect } from "react"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { useForm } from "react-hook-form"
+import { z } from "zod"
 
-interface UserData {
-  id: number;
-  name: string;
-  email: string;
-  role: string;
-  created_at: string;
-  headscale_user?: string;
-}
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form"
+import { Button } from "@/components/ui/button"
+import { Separator } from "@/components/ui/separator"
 
-export default function AccountPage() {
-  const [user, setUser] = useState<UserData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const router = useRouter();
+import { API_URL, authHeaders } from "@/lib/api"
 
+/* ------------------------------------------------------------------ */
+/* Schema (unchanged) */
+/* ------------------------------------------------------------------ */
+const accountFormSchema = z.object({
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+  email: z.string().email("Invalid email address"),
+  username: z.string().min(3, "Username must be at least 3 characters"),
+  currentPassword: z.string().optional(),
+  newPassword: z.string().optional(),
+  confirmPassword: z.string().optional(),
+})
+
+type AccountFormValues = z.infer<typeof accountFormSchema>
+
+/* ------------------------------------------------------------------ */
+/* Component */
+/* ------------------------------------------------------------------ */
+export default function AccountSettings() {
+  const form = useForm<AccountFormValues>({
+    resolver: zodResolver(accountFormSchema),
+    defaultValues: {
+      firstName: "",
+      lastName: "",
+      email: "",
+      username: "",
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+    },
+  })
+
+  /* ---------------- Load user (same page, no UI change) ---------------- */
   useEffect(() => {
     async function loadUser() {
-      setLoading(true);
       try {
         const res = await fetch(`${API_URL}/auth/me`, {
           headers: authHeaders(),
-        });
-        const data = await res.json();
-        setUser(data);
+        })
+        const data = await res.json()
+
+        const [firstName = "", lastName = ""] = data.name?.split(" ") ?? []
+
+        form.reset({
+          firstName,
+          lastName,
+          email: data.email ?? "",
+          username: data.username ?? "",
+        })
       } catch (err) {
-        console.error("Failed to load user:", err);
+        console.error("Failed to load user:", err)
       }
-      setLoading(false);
     }
-    loadUser();
-  }, []);
 
-  function handleLogout() {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("token");
-      router.push("/login");
-    }
+    loadUser()
+  }, [form])
+
+  /* ---------------- Submit ---------------- */
+  async function onSubmit(data: AccountFormValues) {
+    console.log("Form submitted:", data)
+
+    await fetch(`${API_URL}/auth/me`, {
+      method: "PATCH",
+      headers: {
+        ...authHeaders(),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data),
+    })
   }
 
-  function formatDate(dateString: string) {
-    if (!dateString) return "N/A";
-    return new Date(dateString).toLocaleDateString("en-US", {
-      month: "long",
-      day: "numeric",
-      year: "numeric",
-    });
-  }
-
-  const userInitial = user?.name ? user.name.charAt(0).toUpperCase() : "U";
-
+  /* ------------------------------------------------------------------ */
   return (
-    <div className="space-y-8">
-      <SectionHeader
-        title="Account"
-        subtitle="Manage your account settings and preferences."
-        center={false}
-      />
+    <div className="space-y-6 px-4 lg:px-6">
+      <div>
+        <h1 className="text-3xl font-bold">Account Settings</h1>
+        <p className="text-muted-foreground">
+          Manage your account settings and preferences.
+        </p>
+      </div>
 
-      {loading ? (
-        <div className="flex items-center justify-center p-12">
-          <Loader2 className="w-8 h-8 animate-spin text-white/60" />
-        </div>
-      ) : (
-        <div className="grid gap-6">
-          {/* Profile Card */}
-          <div className="bg-white/5 border border-white/10 rounded-xl backdrop-blur-xl p-6">
-            <div className="flex items-start gap-6">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center font-bold text-white text-3xl flex-shrink-0">
-                {userInitial}
-              </div>
-              <div className="flex-1">
-                <h2 className="text-2xl font-bold text-white mb-1">{user?.name}</h2>
-                <p className="text-white/60 mb-4">{user?.email}</p>
-                <div className="flex items-center gap-2">
-                  <span className="px-3 py-1 rounded-full text-xs font-medium bg-pink-500/20 text-pink-400 border border-pink-500/30">
-                    {user?.role || "User"}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          {/* ---------------- Personal Info ---------------- */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Personal Information</CardTitle>
+              <CardDescription>
+                Update your personal information that will be displayed on your profile.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="firstName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>First Name</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-          {/* Account Details */}
-          <div className="bg-white/5 border border-white/10 rounded-xl backdrop-blur-xl overflow-hidden">
-            <div className="p-4 border-b border-white/10">
-              <h3 className="text-lg font-semibold text-white">Account Details</h3>
-            </div>
-            <div className="p-6 space-y-4">
-              <div className="flex items-start gap-4">
-                <div className="p-2 bg-blue-500/20 rounded-lg">
-                  <User className="w-5 h-5 text-blue-400" />
-                </div>
-                <div>
-                  <p className="text-white/60 text-sm">Full Name</p>
-                  <p className="text-white font-medium">{user?.name}</p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-4">
-                <div className="p-2 bg-green-500/20 rounded-lg">
-                  <Mail className="w-5 h-5 text-green-400" />
-                </div>
-                <div>
-                  <p className="text-white/60 text-sm">Email Address</p>
-                  <p className="text-white font-medium">{user?.email}</p>
-                </div>
+                <FormField
+                  control={form.control}
+                  name="lastName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Last Name</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
 
-              <div className="flex items-start gap-4">
-                <div className="p-2 bg-purple-500/20 rounded-lg">
-                  <Shield className="w-5 h-5 text-purple-400" />
-                </div>
-                <div>
-                  <p className="text-white/60 text-sm">Role</p>
-                  <p className="text-white font-medium capitalize">{user?.role || "User"}</p>
-                </div>
-              </div>
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email Address</FormLabel>
+                    <FormControl>
+                      <Input type="email" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-              {user?.headscale_user && (
-                <div className="flex items-start gap-4">
-                  <div className="p-2 bg-yellow-500/20 rounded-lg">
-                    <Shield className="w-5 h-5 text-yellow-400" />
-                  </div>
-                  <div>
-                    <p className="text-white/60 text-sm">Headscale User</p>
-                    <p className="text-white font-medium">{user.headscale_user}</p>
-                  </div>
-                </div>
-              )}
+              <FormField
+                control={form.control}
+                name="username"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Username</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </CardContent>
+          </Card>
 
-              <div className="flex items-start gap-4">
-                <div className="p-2 bg-pink-500/20 rounded-lg">
-                  <Calendar className="w-5 h-5 text-pink-400" />
-                </div>
-                <div>
-                  <p className="text-white/60 text-sm">Member Since</p>
-                  <p className="text-white font-medium">{formatDate(user?.created_at || "")}</p>
-                </div>
-              </div>
-            </div>
-          </div>
+          {/* ---------------- Password ---------------- */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Change Password</CardTitle>
+              <CardDescription>
+                Update your password to keep your account secure.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <FormField
+                control={form.control}
+                name="currentPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Current Password</FormLabel>
+                    <FormControl>
+                      <Input type="password" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-          {/* Danger Zone */}
-          <div className="bg-red-500/5 border border-red-500/20 rounded-xl backdrop-blur-xl overflow-hidden">
-            <div className="p-4 border-b border-red-500/20">
-              <h3 className="text-lg font-semibold text-red-400">Logout</h3>
-            </div>
-            <div className="p-6">
+              <FormField
+                control={form.control}
+                name="newPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>New Password</FormLabel>
+                    <FormControl>
+                      <Input type="password" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="confirmPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Confirm New Password</FormLabel>
+                    <FormControl>
+                      <Input type="password" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </CardContent>
+          </Card>
+
+          {/* ---------------- Danger Zone ---------------- */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Danger Zone</CardTitle>
+              <CardDescription>
+                Irreversible and destructive actions.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Separator />
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-white font-medium mb-1">Logout from your account</p>
-                  <p className="text-white/60 text-sm">You will need to login again to access your account.</p>
+                  <h4 className="font-semibold">Delete Account</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Permanently delete your account and all associated data.
+                  </p>
                 </div>
-                <button
-                  onClick={handleLogout}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors font-medium"
-                >
-                  Logout
-                </button>
+                <Button variant="destructive" type="button">
+                  Delete Account
+                </Button>
               </div>
-            </div>
+            </CardContent>
+          </Card>
+
+          {/* ---------------- Actions ---------------- */}
+          <div className="flex space-x-2">
+            <Button type="submit">Save Changes</Button>
+            <Button variant="outline" type="reset">
+              Cancel
+            </Button>
           </div>
-        </div>
-      )}
+        </form>
+      </Form>
     </div>
-  );
+  )
 }

@@ -3,14 +3,12 @@
 
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
-#include <flutter/method_channel.h>
-#include <flutter/standard_method_codec.h>
 
 #include <memory>
 
 #include "win32_window.h"
 
-// FlutterWindow class
+// A window that does nothing but host a Flutter view.
 class FlutterWindow : public Win32Window {
  public:
   // Creates a new FlutterWindow hosting a Flutter view running |project|.
@@ -30,12 +28,6 @@ class FlutterWindow : public Win32Window {
 
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
-
-  // Setup method channel for input handling
-  void SetupInputMethodChannel(flutter::FlutterEngine* engine);
 };
-
-// Helper function for key mapping
-WORD MapKeyToVirtualKey(const std::string& key);
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

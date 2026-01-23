@@ -22,12 +22,10 @@ export default function CreateUserModal({ open, onClose, onCreated }: any) {
 
     try {
       const res = await api.post("/auth/register", body);
-
-      if (!res) throw new Error();
-
-      onCreated(); // Refresh list
-      onClose();   // Close popup
-    } catch {
+      onCreated();
+      onClose();
+    } catch (err) {
+      console.error(err);
       setError("⚠️ Failed to create user");
     }
 

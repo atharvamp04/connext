@@ -11,6 +11,7 @@
 #include <wrl/client.h>
 #include <vector>
 #include <memory>
+#include <string>
 
 using flutter::EncodableValue;
 using flutter::EncodableMap;
@@ -50,6 +51,12 @@ class ScreenCapturePlugin : public flutter::Plugin {
   
   bool InitCapture();
   EncodableMap CaptureFrame(bool returnPixels);
+
+  // Input injection helpers
+  void SimulateMouseMove(int x, int y);
+  void SimulateMouseClick(std::string button, std::string action);
+  void SimulateMouseScroll(int deltaX, int deltaY);
+  void SimulateKeyPress(std::string key, std::string action);
 };
 
 bool ScreenCapturePlugin::InitCapture() {
@@ -197,14 +204,88 @@ EncodableMap ScreenCapturePlugin::CaptureFrame(bool returnPixels) {
   return result;
 }
 
+void ScreenCapturePlugin::SimulateMouseMove(int x, int y) {
+  double fScreenWidth = ::GetSystemMetrics(SM_CXSCREEN) - 1;
+  double fScreenHeight = ::GetSystemMetrics(SM_CYSCREEN) - 1;
+  double fx = x * (65535.0f / fScreenWidth);
+  double fy = y * (65535.0f / fScreenHeight);
+
+  INPUT input = {0};
+  input.type = INPUT_MOUSE;
+  input.mi.dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE;
+  input.mi.dx = (LONG)fx;
+  input.mi.dy = (LONG)fy;
+  ::SendInput(1, &input, sizeof(INPUT));
+}
+
+void ScreenCapturePlugin::SimulateMouseClick(std::string button, std::string action) {
+  INPUT input = {0};
+  input.type = INPUT_MOUSE;
+  
+  if (button == "left") {
+    if (action == "down") input.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
+    else if (action == "up") input.mi.dwFlags = MOUSEEVENTF_LEFTUP;
+    else if (action == "click") {
+      SimulateMouseClick("left", "down");
+      SimulateMouseClick("left", "up");
+      return;
+    }
+  } else if (button == "right") {
+    if (action == "down") input.mi.dwFlags = MOUSEEVENTF_RIGHTDOWN;
+    else if (action == "up") input.mi.dwFlags = MOUSEEVENTF_RIGHTUP;
+    else if (action == "click") {
+      SimulateMouseClick("right", "down");
+      SimulateMouseClick("right", "up");
+      return;
+    }
+  }
+
+  ::SendInput(1, &input, sizeof(INPUT));
+}
+
+void ScreenCapturePlugin::SimulateMouseScroll(int deltaX, int deltaY) {
+  if (deltaY != 0) {
+    INPUT input = {0};
+    input.type = INPUT_MOUSE;
+    input.mi.dwFlags = MOUSEEVENTF_WHEEL;
+    input.mi.mouseData = deltaY * 120; // 120 is one wheel click
+    ::SendInput(1, &input, sizeof(INPUT));
+  }
+}
+
+void ScreenCapturePlugin::SimulateKeyPress(std::string key, std::string action) {
+  INPUT input = {0};
+  input.type = INPUT_KEYBOARD;
+  
+  WORD vk = 0;
+  if (key.length() == 1) {
+    vk = VkKeyScanA(key[0]);
+  } else {
+    if (key == "Enter") vk = VK_RETURN;
+    else if (key == "Backspace") vk = VK_BACK;
+    else if (key == "Tab") vk = VK_TAB;
+    else if (key == "Space") vk = VK_SPACE;
+    else if (key == "ArrowLeft") vk = VK_LEFT;
+    else if (key == "ArrowRight") vk = VK_RIGHT;
+    else if (key == "ArrowUp") vk = VK_UP;
+    else if (key == "ArrowDown") vk = VK_DOWN;
+  }
+
+  if (vk != 0) {
+    input.ki.wVk = vk;
+    if (action == "up") {
+      input.ki.dwFlags = KEYEVENTF_KEYUP;
+    }
+    ::SendInput(1, &input, sizeof(INPUT));
+  }
+}
+
 void ScreenCapturePlugin::HandleMethodCall(
     const flutter::MethodCall<EncodableValue>& method_call,
     std::unique_ptr<flutter::MethodResult<EncodableValue>> result) {
   
   if (method_call.method_name() == "captureFrame") {
-    // Check if we should return pixels
     bool returnPixels = false;
-    
     if (method_call.arguments()) {
       try {
         auto& args = std::get<EncodableMap>(*method_call.arguments());
@@ -212,56 +293,37 @@ void ScreenCapturePlugin::HandleMethodCall(
         if (it != args.end()) {
           try {
             returnPixels = std::get<bool>(it->second);
-          } catch (...) {
-            // If it's not a bool, just use false
-          }
-        }
-      } catch (...) {
-        // If arguments is not a map, just use default false
-      }
-    }
-    
-    auto frame_result = CaptureFrame(returnPixels);
-    result->Success(EncodableValue(frame_result));
-  } else if (method_call.method_name() == "startNativeVideoCapture") {
-    // Start native video capture for WebRTC
-    int target_width = 1920;
-    int target_height = 1080;
-    int target_fps = 30;
-    
-    if (method_call.arguments()) {
-      try {
-        auto& args = std::get<EncodableMap>(*method_call.arguments());
-        
-        auto width_it = args.find(EncodableValue("width"));
-        if (width_it != args.end()) {
-          try {
-            target_width = std::get<int32_t>(width_it->second);
-          } catch (...) {}
-        }
-        
-        auto height_it = args.find(EncodableValue("height"));
-        if (height_it != args.end()) {
-          try {
-            target_height = std::get<int32_t>(height_it->second);
-          } catch (...) {}
-        }
-        
-        auto fps_it = args.find(EncodableValue("fps"));
-        if (fps_it != args.end()) {
-          try {
-            target_fps = std::get<int32_t>(fps_it->second);
           } catch (...) {}
         }
       } catch (...) {}
     }
-    
+    auto frame_result = CaptureFrame(returnPixels);
+    result->Success(EncodableValue(frame_result));
+  } else if (method_call.method_name() == "startNativeVideoCapture") {
+    int target_width = 1920;
+    int target_height = 1080;
+    int target_fps = 30;
+    if (method_call.arguments()) {
+      try {
+        auto& args = std::get<EncodableMap>(*method_call.arguments());
+        auto width_it = args.find(EncodableValue("width"));
+        if (width_it != args.end()) {
+          try { target_width = std::get<int32_t>(width_it->second); } catch (...) {}
+        }
+        auto height_it = args.find(EncodableValue("height"));
+        if (height_it != args.end()) {
+          try { target_height = std::get<int32_t>(height_it->second); } catch (...) {}
+        }
+        auto fps_it = args.find(EncodableValue("fps"));
+        if (fps_it != args.end()) {
+          try { target_fps = std::get<int32_t>(fps_it->second); } catch (...) {}
+        }
+      } catch (...) {}
+    }
     if (!video_capturer_) {
       video_capturer_ = std::make_shared<ScreenVideoCapturer>();
     }
-    
     bool success = video_capturer_->StartCapture(target_width, target_height, target_fps);
-    
     EncodableMap response;
     response[EncodableValue("success")] = EncodableValue(success);
     if (!success) {
@@ -269,19 +331,15 @@ void ScreenCapturePlugin::HandleMethodCall(
     }
     result->Success(EncodableValue(response));
   } else if (method_call.method_name() == "stopNativeVideoCapture") {
-    // Stop native video capture
     if (video_capturer_) {
       video_capturer_->StopCapture();
     }
-    
     EncodableMap response;
     response[EncodableValue("success")] = EncodableValue(true);
     result->Success(EncodableValue(response));
   } else if (method_call.method_name() == "getNativeVideoFrame") {
-    // Get next frame from video capturer
     EncodableMap response;
     response[EncodableValue("success")] = EncodableValue(false);
-    
     if (!video_capturer_) {
       response[EncodableValue("error")] = EncodableValue("Video capturer not initialized");
     } else {
@@ -296,22 +354,74 @@ void ScreenCapturePlugin::HandleMethodCall(
         response[EncodableValue("error")] = EncodableValue("No frame available");
       }
     }
-    
     result->Success(EncodableValue(response));
   } else if (method_call.method_name() == "getVideoDimensions") {
-    // Get screen dimensions
     if (!video_capturer_) {
       video_capturer_ = std::make_shared<ScreenVideoCapturer>();
       video_capturer_->StartCapture(1920, 1080, 30);
     }
-    
     int width, height;
     video_capturer_->GetDimensions(width, height);
-    
     EncodableMap response;
     response[EncodableValue("width")] = EncodableValue(static_cast<int32_t>(width));
     response[EncodableValue("height")] = EncodableValue(static_cast<int32_t>(height));
     result->Success(EncodableValue(response));
+  } else if (method_call.method_name() == "mouseMove") {
+    if (method_call.arguments()) {
+      try {
+        auto args = std::get<EncodableMap>(*method_call.arguments());
+        int32_t x = std::get<int32_t>(args[EncodableValue("x")]);
+        int32_t y = std::get<int32_t>(args[EncodableValue("y")]);
+        SimulateMouseMove(x, y);
+        result->Success();
+      } catch (...) {
+        result->Error("INVALID_ARGUMENTS", "Failed to parse arguments");
+      }
+    } else {
+      result->Error("INVALID_ARGUMENTS", "Arguments missing");
+    }
+  } else if (method_call.method_name() == "mouseClick") {
+    if (method_call.arguments()) {
+      try {
+        auto args = std::get<EncodableMap>(*method_call.arguments());
+        std::string button = std::get<std::string>(args[EncodableValue("button")]);
+        std::string action = std::get<std::string>(args[EncodableValue("action")]);
+        SimulateMouseClick(button, action);
+        result->Success();
+      } catch (...) {
+        result->Error("INVALID_ARGUMENTS", "Failed to parse arguments");
+      }
+    } else {
+      result->Error("INVALID_ARGUMENTS", "Arguments missing");
+    }
+  } else if (method_call.method_name() == "mouseScroll") {
+    if (method_call.arguments()) {
+      try {
+        auto args = std::get<EncodableMap>(*method_call.arguments());
+        int32_t deltaX = std::get<int32_t>(args[EncodableValue("deltaX")]);
+        int32_t deltaY = std::get<int32_t>(args[EncodableValue("deltaY")]);
+        SimulateMouseScroll(deltaX, deltaY);
+        result->Success();
+      } catch (...) {
+        result->Error("INVALID_ARGUMENTS", "Failed to parse arguments");
+      }
+    } else {
+      result->Error("INVALID_ARGUMENTS", "Arguments missing");
+    }
+  } else if (method_call.method_name() == "keyPress") {
+    if (method_call.arguments()) {
+      try {
+        auto args = std::get<EncodableMap>(*method_call.arguments());
+        std::string key = std::get<std::string>(args[EncodableValue("key")]);
+        std::string action = std::get<std::string>(args[EncodableValue("action")]);
+        SimulateKeyPress(key, action);
+        result->Success();
+      } catch (...) {
+        result->Error("INVALID_ARGUMENTS", "Failed to parse arguments");
+      }
+    } else {
+      result->Error("INVALID_ARGUMENTS", "Arguments missing");
+    }
   } else {
     result->NotImplemented();
   }

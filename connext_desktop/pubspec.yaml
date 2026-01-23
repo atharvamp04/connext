@@ -13,9 +13,11 @@ dependencies:
   web_socket_channel: ^3.0.1
   image: ^4.1.7
   shared_preferences: ^2.2.2
+  path_provider: ^2.1.1
   
   screen_capture_plugin:
     path: ../screen_capture_plugin
+  
 
 dev_dependencies:
   flutter_test:

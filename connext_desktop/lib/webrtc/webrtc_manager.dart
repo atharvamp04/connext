@@ -343,7 +343,7 @@ class WebRTCManager {
             y = rawY.toInt();
           }
 
-          await NativeInputHandler.handleMouseMove(x, y);
+          await NativeInputHandler.handleMouseMove(x.toDouble(), y.toDouble());
         } else if (action == 'down' || action == 'up' || action == 'click') {
           final button = data['button'] as String? ?? 'left';
 
@@ -359,7 +359,7 @@ class WebRTCManager {
                 ? (_screenHeight > 0 ? (rawY * (_screenHeight - 1)).round() : rawY.toInt())
                 : rawY.toInt();
 
-            await NativeInputHandler.handleMouseMove(cx, cy);
+            await NativeInputHandler.handleMouseMove(cx.toDouble(), cy.toDouble());
           }
 
           await NativeInputHandler.handleMouseClick(button, action);

@@ -1,38 +1,82 @@
-"use client";
+"use client"
+
+import { Github, Twitter, Linkedin, Heart } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
 export default function Footer() {
   return (
-    <footer className="relative w-full bg-black text-white py-24 px-6 overflow-hidden">
+    <footer className="border-t bg-background">
+      <div className="container mx-auto px-6 py-16">
 
+        {/* ================= TOP ================= */}
+        <div className="flex flex-col md:flex-row justify-between items-center gap-8 mb-10">
 
-      {/* Bottom Section */}
-      <div className="relative z-10 max-w-7xl mx-auto mt-8 flex flex-col md:flex-row justify-between items-center gap-6">
+          {/* Brand */}
+          <div className="text-center md:text-left max-w-md">
+            <h3 className="text-xl font-bold text-foreground">
+              Accremo
+            </h3>
+            <p className="text-sm text-muted-foreground mt-2">
+              Infrastructure-grade peer-to-peer networking for secure remote
+              access, file transfer, and distributed systems.
+            </p>
+          </div>
 
-        <p className="text-white/50 text-sm">
-          © {new Date().getFullYear()} Connext — All rights reserved.
-        </p>
+          {/* Social Icons */}
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" asChild>
+              <a
+                href="https://github.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="GitHub"
+              >
+                <Github className="h-5 w-5" />
+              </a>
+            </Button>
 
-        {/* Social Icons */}
-        <div className="flex items-center gap-6 opacity-80 hover:opacity-100 transition">
-          <a href="#">
-            <img
-              src="https://cdn.simpleicons.org/github/ffffff"
-              width="24"
-              alt="GitHub"
-              className="hover:scale-110 transition"
-            />
-          </a>
-          <a href="#">
-            <img
-              src="https://cdn.simpleicons.org/linkedin/ffffff"
-              width="24"
-              alt="LinkedIn"
-              className="hover:scale-110 transition"
-            />
-          </a>
+            <Button variant="ghost" size="icon" asChild>
+              <a
+                href="https://twitter.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Twitter"
+              >
+                <Twitter className="h-5 w-5" />
+              </a>
+            </Button>
+
+            <Button variant="ghost" size="icon" asChild>
+              <a
+                href="https://linkedin.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="LinkedIn"
+              >
+                <Linkedin className="h-5 w-5" />
+              </a>
+            </Button>
+          </div>
         </div>
-      </div>
 
+
+        {/* ================= BOTTOM ================= */}
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-muted-foreground">
+          <div className="flex items-center gap-1">
+            <span>Made with</span>
+            <Heart className="h-4 w-4 text-red-500 fill-current" />
+            <span>by</span>
+            <span className="font-medium text-foreground">
+              Accremo
+            </span>
+          </div>
+
+          <span>
+            © {new Date().getFullYear()} Accremo — All rights reserved.
+          </span>
+        </div>
+
+      </div>
     </footer>
-  );
+  )
 }

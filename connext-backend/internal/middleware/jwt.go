@@ -35,10 +35,7 @@ func Protected() fiber.Handler {
 			return c.Status(401).JSON(fiber.Map{"error": "user not found"})
 		}
 
-		// 🟢 Store both entire user and headscale username
 		c.Locals("user", user)
-		c.Locals("headscaleUser", user.HeadscaleUser)
-
 		return c.Next()
 	}
 }

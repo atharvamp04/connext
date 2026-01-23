@@ -9,16 +9,22 @@ export default function GenerateKeyModal({ open, onClose }: any) {
   const [reusable, setReusable] = useState(true);
   const [key, setKey] = useState("");
 
-  async function generateKey() {
-    setLoading(true);
-    try {
-      const res = await api("/headscale/keys", "POST", { reusable });
-      setKey(res.key);
-    } catch {
-      alert("Failed to generate key");
-    }
-    setLoading(false);
+async function generateKey() {
+  setLoading(true);
+  try {
+    const res = await api.post("/enroll-keys", { reusable });
+
+    console.log("DEBUG KEY RESPONSE:", res);
+    alert(JSON.stringify(res, null, 2));
+
+    setKey(res.key);
+  } catch (err) {
+    console.error("MODAL ERROR", err);
+    alert("Failed to generate enrollment key");
   }
+  setLoading(false);
+}
+
 
   function closeAll() {
     setKey("");
@@ -42,7 +48,7 @@ export default function GenerateKeyModal({ open, onClose }: any) {
             exit={{ scale: 0.85, opacity: 0 }}
             className="relative z-10 w-full max-w-md bg-black/70 border border-white/10 rounded-xl p-6 backdrop-blur-xl"
           >
-            <h3 className="text-2xl font-bold mb-4 text-white">Generate New Key</h3>
+            <h3 className="text-2xl font-bold mb-4 text-white">Generate New Enrollment Key</h3>
 
             {key ? (
               <>

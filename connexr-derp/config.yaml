@@ -1,0 +1,12 @@
+listen_addr: ":8080"  # Changed from :443
+#listen_addr: ":443"
+#cert_file: "certs/server.crt"
+#key_file: "certs/server.key"
+
+# Optional: allow many regions later
+#region: "in-mumbai"
+
+# config.yaml - HTTP mode for local testing
+# cert_file: ""       # Comment out for HTTP
+# key_file: ""        # Comment out for HTTP
+region: "local"

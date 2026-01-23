@@ -1,6 +1,5 @@
-// 🌍 Base API URL (Backend URL)
-export const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081/api";
+// 🌍 Base API URL (Backend URL) - FORCE full URL
+export const API_URL = "/api";
 
 // ⬇️ Helper to fetch with token
 async function request(path: string, method: string, body?: any) {
@@ -9,7 +8,10 @@ async function request(path: string, method: string, body?: any) {
     token = localStorage.getItem("token") || "";
   }
 
-  const res = await fetch(`${API_URL}${path}`, {
+  const fullUrl = `${API_URL}${path}`;
+  console.log(`🔍 Requesting: ${method} ${fullUrl}`); // Debug log
+
+  const res = await fetch(fullUrl, {
     method,
     headers: {
       "Content-Type": "application/json",
@@ -28,7 +30,7 @@ async function request(path: string, method: string, body?: any) {
 
   if (!res.ok) {
     const msg = await res.text();
-    throw new Error(msg || "Request failed");
+    throw new Error(`HTTP error! status: ${res.status} - ${msg}`);
   }
 
   return res.json();
