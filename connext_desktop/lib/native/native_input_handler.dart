@@ -1,9 +1,9 @@
 import 'package:flutter/services.dart';
 
 class NativeInputHandler {
-  static const MethodChannel _channel = MethodChannel('connext_desktop/input');
+  static const MethodChannel _channel = MethodChannel('native_input');
 
-  static Future<void> handleMouseMove(int x, int y) async {
+  static Future<void> handleMouseMove(double x, double y) async {
     try {
       await _channel.invokeMethod('mouseMove', {
         'x': x,

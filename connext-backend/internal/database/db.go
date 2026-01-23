@@ -72,12 +72,10 @@ func Connect() {
 func runMigrations() error {
 	log.Println("🔄 Running database migrations...")
 
-	// AutoMigrate will create tables if they don't exist
 	err := DB.AutoMigrate(
 		&models.User{},
-		&models.Invitation{},
-		&models.NodeRecord{},
-		&models.PreAuthKeyRecord{},
+		&models.ConnexrDevice{},
+		&models.EnrollmentKey{},
 	)
 
 	if err != nil {
@@ -85,15 +83,7 @@ func runMigrations() error {
 		return err
 	}
 
-	log.Println("✅ Migrations completed successfully")
-
-	// Verify tables exist
-	if DB.Migrator().HasTable(&models.User{}) {
-		log.Println("   ✓ users table exists")
-	}
-	if DB.Migrator().HasTable(&models.Invitation{}) {
-		log.Println("   ✓ invitations table exists")
-	}
+	log.Println("✅ Connexr migrations completed successfully")
 
 	return nil
 }

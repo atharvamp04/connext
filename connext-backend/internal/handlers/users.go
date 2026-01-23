@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"os"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -16,42 +14,40 @@ import (
 // --------------------- LIST USERS ---------------------
 
 func ListUsers(c *fiber.Ctx) error {
-	// Get current logged-in user
 	currentUser := c.Locals("user").(models.User)
 
-	// Get only users created by the current user
 	var users []models.User
-	if err := database.DB.Where("created_by = ? OR id = ?", currentUser.ID, currentUser.ID).Find(&users).Error; err != nil {
+	if err := database.DB.
+		Where("created_by = ? OR id = ?", currentUser.ID, currentUser.ID).
+		Find(&users).Error; err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": "failed to fetch users"})
 	}
 
-	// Return users without passwords
 	type SafeUser struct {
-		ID            uint   `json:"id"`
-		Name          string `json:"name"`
-		Email         string `json:"email"`
-		HeadscaleUser string `json:"headscale_user"`
-		CreatedAt     string `json:"created_at"`
+		ID        uint   `json:"id"`
+		FirstName string `json:"first_name"`
+		LastName  string `json:"last_name"`
+		Email     string `json:"email"`
+		CreatedAt string `json:"created_at"`
 	}
 
-	safeUsers := make([]SafeUser, len(users))
+	response := make([]SafeUser, len(users))
 	for i, u := range users {
-		safeUsers[i] = SafeUser{
-			ID:            u.ID,
-			Name:          u.Name,
-			Email:         u.Email,
-			HeadscaleUser: u.HeadscaleUser,
-			CreatedAt:     u.CreatedAt.Format(time.RFC3339),
+		response[i] = SafeUser{
+			ID:        u.ID,
+			FirstName: u.FirstName,
+			LastName:  u.LastName,
+			Email:     u.Email,
+			CreatedAt: u.CreatedAt.Format(time.RFC3339),
 		}
 	}
 
-	return c.JSON(fiber.Map{"users": safeUsers})
+	return c.JSON(fiber.Map{"users": response})
 }
 
-// --------------------- CREATE USER (Admin creates for another user) ---------------------
+// --------------------- CREATE USER (REGISTER) ---------------------
 
 func CreateUser(c *fiber.Ctx) error {
-	// Get current logged-in user (the creator)
 	currentUser := c.Locals("user").(models.User)
 
 	var body struct {
@@ -61,16 +57,26 @@ func CreateUser(c *fiber.Ctx) error {
 	}
 
 	if err := c.BodyParser(&body); err != nil {
-		return c.Status(400).JSON(fiber.Map{"error": "invalid body"})
+		return c.Status(400).JSON(fiber.Map{"error": "invalid request body"})
 	}
 
 	if body.Name == "" || body.Email == "" || body.Password == "" {
-		return c.Status(400).JSON(fiber.Map{"error": "name, email, and password are required"})
+		return c.Status(400).JSON(fiber.Map{
+			"error": "name, email and password are required",
+		})
+	}
+
+	// Split name into first & last
+	parts := strings.Fields(strings.TrimSpace(body.Name))
+	firstName := parts[0]
+	lastName := ""
+	if len(parts) > 1 {
+		lastName = strings.Join(parts[1:], " ")
 	}
 
 	email := strings.ToLower(strings.TrimSpace(body.Email))
 
-	// Check if user exists
+	// Check existing email
 	var exists models.User
 	if err := database.DB.Where("email = ?", email).First(&exists).Error; err == nil {
 		return c.Status(409).JSON(fiber.Map{"error": "email already exists"})
@@ -82,46 +88,25 @@ func CreateUser(c *fiber.Ctx) error {
 		return c.Status(500).JSON(fiber.Map{"error": "failed to hash password"})
 	}
 
-	// Create Headscale username from email prefix
-	split := strings.Split(email, "@")
-	hsUser := split[0]
-	hsUser = strings.NewReplacer(".", "_", "-", "_", "+", "_").Replace(hsUser)
-
-	// Create user in Headscale
-	container := os.Getenv("HEADSCALE_CONTAINER_NAME")
-	if container == "" {
-		container = "headscale"
-	}
-
-	cmd := exec.Command("docker", "exec", container, "headscale", "users", "create", hsUser)
-	out, err := cmd.CombinedOutput()
-	if err != nil && !strings.Contains(string(out), "already exists") {
-		return c.Status(500).JSON(fiber.Map{
-			"error":  "failed creating headscale user",
-			"detail": string(out),
-		})
-	}
-
-	// Store user in DB with CreatedBy field
 	user := models.User{
-		Name:          body.Name,
-		Email:         email,
-		Password:      string(hashed),
-		HeadscaleUser: hsUser,
-		CreatedBy:     currentUser.ID, // Link to creator
+		FirstName: firstName,
+		LastName:  lastName,
+		Email:     email,
+		Password:  string(hashed),
+		CreatedBy: currentUser.ID,
 	}
 
 	if err := database.DB.Create(&user).Error; err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": "failed saving user"})
+		return c.Status(500).JSON(fiber.Map{"error": "failed to create user"})
 	}
 
 	return c.Status(201).JSON(fiber.Map{
 		"message": "user created successfully",
 		"user": fiber.Map{
-			"id":             user.ID,
-			"name":           user.Name,
-			"email":          user.Email,
-			"headscale_user": user.HeadscaleUser,
+			"id":         user.ID,
+			"first_name": user.FirstName,
+			"last_name":  user.LastName,
+			"email":      user.Email,
 		},
 	})
 }
@@ -137,32 +122,14 @@ func DeleteUser(c *fiber.Ctx) error {
 		return c.Status(404).JSON(fiber.Map{"error": "user not found"})
 	}
 
-	// Only allow deleting users you created
 	if user.CreatedBy != currentUser.ID {
-		return c.Status(403).JSON(fiber.Map{"error": "you can only delete users you created"})
-	}
-
-	// Delete from Headscale
-	container := os.Getenv("HEADSCALE_CONTAINER_NAME")
-	if container == "" {
-		container = "headscale"
-	}
-
-	cmd := exec.Command("docker", "exec", container,
-		"headscale", "users", "destroy", "--force", user.HeadscaleUser,
-	)
-
-	out, err := cmd.CombinedOutput()
-	if err != nil && !strings.Contains(string(out), "not found") {
-		return c.Status(500).JSON(fiber.Map{
-			"error":  "failed to delete headscale user",
-			"detail": string(out),
+		return c.Status(403).JSON(fiber.Map{
+			"error": "you can only delete users you created",
 		})
 	}
 
-	// Delete from database
 	if err := database.DB.Delete(&user).Error; err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": "failed to delete user from database"})
+		return c.Status(500).JSON(fiber.Map{"error": "failed to delete user"})
 	}
 
 	return c.JSON(fiber.Map{"message": "user deleted successfully"})
@@ -179,7 +146,7 @@ func UpdateUser(c *fiber.Ctx) error {
 	}
 
 	if err := c.BodyParser(&body); err != nil {
-		return c.Status(400).JSON(fiber.Map{"error": "invalid body"})
+		return c.Status(400).JSON(fiber.Map{"error": "invalid request body"})
 	}
 
 	var user models.User
@@ -187,17 +154,26 @@ func UpdateUser(c *fiber.Ctx) error {
 		return c.Status(404).JSON(fiber.Map{"error": "user not found"})
 	}
 
-	// Update fields
 	if body.Name != "" {
-		user.Name = body.Name
+		parts := strings.Fields(strings.TrimSpace(body.Name))
+		user.FirstName = parts[0]
+		if len(parts) > 1 {
+			user.LastName = strings.Join(parts[1:], " ")
+		} else {
+			user.LastName = ""
+		}
 	}
+
 	if body.Email != "" {
 		email := strings.ToLower(strings.TrimSpace(body.Email))
-		// Check if new email is already taken
+
 		var exists models.User
-		if err := database.DB.Where("email = ? AND id != ?", email, user.ID).First(&exists).Error; err == nil {
-			return c.Status(409).JSON(fiber.Map{"error": "email already exists"})
+		if err := database.DB.
+			Where("email = ? AND id != ?", email, user.ID).
+			First(&exists).Error; err == nil {
+			return c.Status(409).JSON(fiber.Map{"error": "email already in use"})
 		}
+
 		user.Email = email
 	}
 
@@ -208,10 +184,10 @@ func UpdateUser(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"message": "user updated successfully",
 		"user": fiber.Map{
-			"id":             user.ID,
-			"name":           user.Name,
-			"email":          user.Email,
-			"headscale_user": user.HeadscaleUser,
+			"id":         user.ID,
+			"first_name": user.FirstName,
+			"last_name":  user.LastName,
+			"email":      user.Email,
 		},
 	})
 }

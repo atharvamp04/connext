@@ -16,95 +16,107 @@ import (
 )
 
 func main() {
-	// Load env
 	godotenv.Load()
-
-	// Connect DB
 	database.Connect()
 
-	// Auto-migrate new models for node and key tracking
 	database.DB.AutoMigrate(
 		&models.User{},
-		&models.Invitation{},
-		&models.NodeRecord{},       // NEW: Track node ownership
-		&models.PreAuthKeyRecord{}, // NEW: Track key ownership
+		&models.ConnexrDevice{},
+		&models.EnrollmentKey{},
+		&models.PendingMachine{},
 	)
 
 	app := fiber.New(fiber.Config{
-		AppName: "Connext Backend",
+		ErrorHandler: func(c *fiber.Ctx, err error) error {
+			code := fiber.StatusInternalServerError
+			if e, ok := err.(*fiber.Error); ok {
+				code = e.Code
+			}
+			log.Printf("Error: %v", err)
+			return c.Status(code).JSON(fiber.Map{
+				"error": err.Error(),
+			})
+		},
 	})
 
-	// Global Middleware
-	app.Use(logger.New())
+	app.Use(logger.New(logger.Config{
+		Format: "[${time}] ${status} - ${method} ${path} (${latency})\n",
+	}))
+
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: "*",
 		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
 		AllowMethods: "GET, POST, PUT, DELETE, OPTIONS",
 	}))
 
-	// Public Routes
 	api := app.Group("/api")
 
-	// Auth
+	// ------------------------------------------------
+	// PUBLIC ENDPOINTS (DAEMON MUST ACCESS THESE)
+	// ------------------------------------------------
+
 	api.Post("/auth/register", handlers.Register)
 	api.Post("/auth/login", handlers.Login)
 
-	// Public invitation routes (for viewing/accepting invites)
-	api.Get("/invitations/:token", handlers.GetInvitationByToken)
+	api.Get("/auth/me", middleware.Protected(), func(c *fiber.Ctx) error {
+		user := c.Locals("user").(models.User)
+		return c.JSON(fiber.Map{
+			"id":         user.ID,
+			"first_name": user.FirstName,
+			"last_name":  user.LastName,
+			"email":      user.Email,
+		})
+	})
 
-	// Webhooks (optional - for advanced node tracking)
-	api.Post("/webhooks/node-registered", handlers.NodeRegistrationWebhook)
+	// Daemon enrollment (public)
+	api.Post("/machines/register/start", handlers.RegisterMachineStart)
+	api.Get("/machines/register/status", handlers.RegisterMachineStatus)
 
-	// Protected Routes (Require authentication)
-	protected := api.Group("/", middleware.Protected())
+	// Silent enrollment
+	api.Post("/enroll", handlers.EnrollDevice)
 
-	// Current user info
-	protected.Get("/auth/me", handlers.Me)
+	// Heartbeat (public!)
+	api.Post("/machines/heartbeat", handlers.Heartbeat)
 
-	// User Management
-	protected.Get("/users", handlers.ListUsers)
-	protected.Post("/users", handlers.CreateUser)
-	protected.Put("/users/:id", handlers.UpdateUser)
-	protected.Delete("/users/:id", handlers.DeleteUser)
+	// NAT punching (public!)
+	api.Post("/punch", handlers.PunchListener)
+	api.Post("/punch/report", handlers.PunchReportHandler)
 
-	// Invitation Management
-	protected.Post("/invitations", handlers.CreateInvitation)
-	protected.Get("/invitations", handlers.ListInvitations)
-	protected.Post("/invitations/:token/accept", handlers.AcceptInvitation)
-	protected.Delete("/invitations/:id", handlers.CancelInvitation)
+	// Most important: peers endpoint MUST be public
+	api.Get("/peers", handlers.ListPeers)
 
-	// Headscale Routes
-	protected.Get("/headscale/nodes", handlers.ListNodes)
-	protected.Delete("/headscale/nodes/:id", handlers.DeleteNode)
-	protected.Get("/headscale/keys", handlers.ListKeys)
-	protected.Post("/headscale/keys", handlers.CreateKey)
-	protected.Delete("/headscale/keys/:id", handlers.DeleteKey)
+	// ------------------------------------------------
+	// ADMIN PROTECTED ROUTES
+	// ------------------------------------------------
+	// 🔥 CHANGED: Remove the "/" prefix
+	admin := api.Group("", middleware.Protected())
 
-	// DNS Configuration Routes
-	protected.Get("/dns/config", handlers.GetDNSConfig)
-	protected.Post("/dns/config", handlers.SetDNSConfig)
+	admin.Get("/enroll-keys", handlers.ListEnrollKeys)
+	admin.Post("/enroll-keys", handlers.CreateEnrollKey)
+	admin.Delete("/enroll-keys/:id", handlers.DeleteEnrollKey)
 
-	// Port
+	admin.Get("/devices", handlers.ListDevices)
+	admin.Delete("/devices/:pubkey", handlers.DeleteDevice)
+
+	admin.Get("/dns", handlers.GetDNSConfig)
+	admin.Post("/dns", handlers.SetDNSConfig)
+
+	// Approving pending machines (browser)
+	admin.Post("/machines/approve/:token", handlers.ApproveMachine)
+	admin.Get("/machines/pending/:token", handlers.GetPendingMachine)
+
+	// Dashboard nodes (duplicate route, but keeping for compatibility)
+	admin.Get("/nodes", handlers.ListDevices)
+
+	// Users endpoint
+	admin.Get("/users", handlers.ListUsers)
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8081"
 	}
 
-	// Startup logs
-	log.Println("========================================")
-	log.Println("🚀 Connext Backend Starting...")
-	log.Println("========================================")
-	log.Println("📧 SMTP Configuration:")
-	log.Println("   Host:", os.Getenv("SMTP_HOST"))
-	log.Println("   User:", os.Getenv("SMTP_USER"))
-	log.Println("   Port:", os.Getenv("SMTP_PORT"))
-	log.Println("🗄️  Database: Connected")
-	log.Println("🔐 Authentication: Enabled")
-	log.Println("🌐 CORS: Enabled (* - All Origins)")
-	log.Println("📊 Server Port:", port)
-	log.Println("========================================")
-	log.Printf("✅ Server is ready and listening on http://localhost:%s\n", port)
-	log.Println("========================================")
-
+	log.Println("🚀 Connexr Control Plane listening on port", port)
+	log.Println("📍 API endpoints available at http://localhost:" + port + "/api")
 	app.Listen(":" + port)
 }

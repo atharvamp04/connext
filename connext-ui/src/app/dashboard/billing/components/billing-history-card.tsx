@@ -1,0 +1,51 @@
+"use client"
+
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { PricingPlans } from "@/components/pricing-plans"
+import { CurrentPlanCard } from "./components/current-plan-card"
+import { BillingHistoryCard } from "./components/billing-history-card"
+
+// Static data (can replace with API later)
+import currentPlanData from "./data/current-plan.json"
+import billingHistoryData from "./data/billing-history.json"
+
+export default function BillingSettings() {
+  const handlePlanSelect = (planId: string) => {
+    console.log("Plan selected:", planId)
+    // TODO: call upgrade/downgrade API
+  }
+
+  return (
+    <div className="space-y-6 px-4 lg:px-6">
+      <div>
+        <h1 className="text-3xl font-bold">Plans & Billing</h1>
+        <p className="text-muted-foreground">
+          Manage your subscription and billing information.
+        </p>
+      </div>
+
+      {/* Current Plan + History */}
+      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+        <CurrentPlanCard plan={currentPlanData} />
+        <BillingHistoryCard history={billingHistoryData} />
+      </div>
+
+      {/* Available Plans */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Available Plans</CardTitle>
+          <CardDescription>
+            Choose a plan that works best for you.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <PricingPlans
+            mode="billing"
+            currentPlanId={currentPlanData.id}
+            onPlanSelect={handlePlanSelect}
+          />
+        </CardContent>
+      </Card>
+    </div>
+  )
+}

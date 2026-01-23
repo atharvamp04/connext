@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -14,135 +13,145 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// --------------------- Request Structs ---------------------
-
-type registerRequest struct {
-	Name     string `json:"name"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
-}
-
-type loginRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
-}
-
 // --------------------- REGISTER ---------------------
 
 func Register(c *fiber.Ctx) error {
-	var body registerRequest
-
-	if err := c.BodyParser(&body); err != nil {
-		return c.Status(400).JSON(fiber.Map{"error": "invalid body"})
+	var body struct {
+		Name     string `json:"name"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
 	}
 
-	if body.Email == "" || body.Password == "" || body.Name == "" {
-		return c.Status(400).JSON(fiber.Map{"error": "missing fields"})
+	if err := c.BodyParser(&body); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "invalid request body"})
+	}
+
+	if body.Name == "" || body.Email == "" || body.Password == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "name, email and password are required",
+		})
+	}
+
+	// Split full name
+	parts := strings.Fields(strings.TrimSpace(body.Name))
+	firstName := parts[0]
+	lastName := ""
+	if len(parts) > 1 {
+		lastName = strings.Join(parts[1:], " ")
 	}
 
 	email := strings.ToLower(strings.TrimSpace(body.Email))
 
-	// ⛔ Check if user exists
+	// Check existing user
 	var exists models.User
 	if err := database.DB.Where("email = ?", email).First(&exists).Error; err == nil {
-		return c.Status(400).JSON(fiber.Map{"error": "email already exists"})
+		return c.Status(409).JSON(fiber.Map{"error": "email already exists"})
 	}
 
-	// 🔐 Hash password
-	hashed, _ := bcrypt.GenerateFromPassword([]byte(body.Password), 14)
-
-	// 🏷️ Create Headscale username from email prefix
-	split := strings.Split(email, "@")
-	hsUser := split[0]
-	hsUser = strings.NewReplacer(".", "_", "-", "_", "+", "_").Replace(hsUser)
-
-	// 🐳 Create user in Headscale
-	container := os.Getenv("HEADSCALE_CONTAINER_NAME")
-	if container == "" {
-		container = "headscale"
+	// Hash password
+	hashed, err := bcrypt.GenerateFromPassword([]byte(body.Password), 14)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "failed to hash password"})
 	}
 
-	cmd := exec.Command("docker", "exec", container, "headscale", "users", "create", hsUser)
-	out, err := cmd.CombinedOutput()
-	if err != nil && !strings.Contains(string(out), "already exists") {
-		return c.Status(500).JSON(fiber.Map{
-			"error":  "failed creating headscale user",
-			"detail": string(out),
-		})
-	}
-
-	// 💾 Store user in DB
+	// Create user
 	user := models.User{
-		Name:          body.Name,
-		Email:         email,
-		Password:      string(hashed),
-		HeadscaleUser: hsUser,
+		FirstName: firstName,
+		LastName:  lastName,
+		Email:     email,
+		Password:  string(hashed),
 	}
 
 	if err := database.DB.Create(&user).Error; err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": "failed saving user"})
+		return c.Status(500).JSON(fiber.Map{"error": "failed to create user"})
 	}
 
-	// 🎟️ Generate JWT Token
-	tokenString, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"id":    user.ID,
-		"email": user.Email,
-		"exp":   time.Now().Add(7 * 24 * time.Hour).Unix(), // 7 days
-	}).SignedString([]byte(os.Getenv("JWT_SECRET")))
+	token, err := generateJWT(user)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "failed to generate token"})
+	}
 
-	return c.JSON(fiber.Map{
-		"message": "registered",
+	return c.Status(201).JSON(fiber.Map{
+		"message": "registered successfully",
 		"user": fiber.Map{
-			"id":             user.ID,
-			"name":           user.Name,
-			"email":          user.Email,
-			"headscale_user": user.HeadscaleUser,
+			"id":         user.ID,
+			"first_name": user.FirstName,
+			"last_name":  user.LastName,
+			"email":      user.Email,
 		},
-		"token": tokenString,
+		"token": token,
 	})
 }
 
 // --------------------- LOGIN ---------------------
 
 func Login(c *fiber.Ctx) error {
-	var body loginRequest
-	if err := c.BodyParser(&body); err != nil {
-		return c.Status(400).JSON(fiber.Map{"error": "invalid body"})
+	var body struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
 	}
 
-	email := strings.ToLower(body.Email)
+	if err := c.BodyParser(&body); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "invalid request body"})
+	}
+
+	email := strings.ToLower(strings.TrimSpace(body.Email))
 
 	var user models.User
 	if err := database.DB.Where("email = ?", email).First(&user).Error; err != nil {
 		return c.Status(401).JSON(fiber.Map{"error": "invalid credentials"})
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(body.Password)); err != nil {
+	if err := bcrypt.CompareHashAndPassword(
+		[]byte(user.Password),
+		[]byte(body.Password),
+	); err != nil {
 		return c.Status(401).JSON(fiber.Map{"error": "invalid credentials"})
 	}
 
-	token, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"id":    user.ID,
-		"email": user.Email,
-		"exp":   time.Now().Add(24 * time.Hour).Unix(),
-	}).SignedString([]byte(os.Getenv("JWT_SECRET")))
+	token, err := generateJWT(user)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "failed to generate token"})
+	}
 
-	return c.JSON(fiber.Map{"token": token})
+	return c.JSON(fiber.Map{
+		"token": token,
+		"user": fiber.Map{
+			"id":         user.ID,
+			"first_name": user.FirstName,
+			"last_name":  user.LastName,
+			"email":      user.Email,
+		},
+	})
 }
 
 // --------------------- ME ---------------------
 
 func Me(c *fiber.Ctx) error {
-	userAny := c.Locals("user")
-	userModel, ok := userAny.(models.User)
+	user, ok := c.Locals("user").(models.User)
 	if !ok {
-		return c.Status(500).JSON(fiber.Map{"error": "user context missing"})
+		return c.Status(401).JSON(fiber.Map{"error": "unauthorized"})
 	}
 
 	return c.JSON(fiber.Map{
-		"id":             userModel.ID,
-		"name":           userModel.Name,
-		"email":          userModel.Email,
-		"headscale_user": userModel.HeadscaleUser,
+		"id":         user.ID,
+		"first_name": user.FirstName,
+		"last_name":  user.LastName,
+		"email":      user.Email,
 	})
+}
+
+// --------------------- JWT HELPER ---------------------
+
+func generateJWT(user models.User) (string, error) {
+	secret := os.Getenv("JWT_SECRET")
+
+	claims := jwt.MapClaims{
+		"id":    user.ID,
+		"email": user.Email,
+		"exp":   time.Now().Add(7 * 24 * time.Hour).Unix(), // 7 days
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(secret))
 }
